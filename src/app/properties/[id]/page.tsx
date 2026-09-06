@@ -36,7 +36,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
           <div className="lg:col-span-2 h-[420px] bg-white rounded-xl overflow-hidden">
             {p.photos[0] ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.photos[0]} alt={p.title} className="w-full h-full object-cover" />
+              <img src={`/api/image?url=${encodeURIComponent(p.photos[0])}`} alt={p.title} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full grid place-items-center text-zinc-400">Sin imágenes</div>
             )}
@@ -45,7 +45,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
             {[1, 2].map((i) =>
               p.photos[i] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={p.photos[i]} alt="" className="w-full h-full object-cover rounded-xl" />
+                <img key={i} src={`/api/image?url=${encodeURIComponent(p.photos[i])}`} alt="" className="w-full h-full object-cover rounded-xl" />
               ) : (
                 <div key={i} className="bg-white rounded-xl grid place-items-center text-zinc-400 text-sm">Sin imagen</div>
               )
@@ -64,7 +64,10 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
               </div>
               <h1 className="text-2xl font-bold mt-3">{p.title}</h1>
               <p className="text-zinc-600">{p.addressNormalized || p.addressRaw} · {p.municipality}, {p.province} {p.postalCode}</p>
-              <div className="text-3xl font-bold mt-2">{p.price.toLocaleString("es-ES")} €</div>
+              <div className="flex items-baseline gap-3 mt-2">
+                <div className="text-3xl font-bold">{p.price.toLocaleString("es-ES")} €</div>
+                {(p as unknown as { pricePerM2: number | null }).pricePerM2 ? <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">{Math.round((p as unknown as { pricePerM2: number }).pricePerM2).toLocaleString("es-ES")} €/m²</span> : null}
+              </div>
               <div className="text-xs text-zinc-500 mt-1">Actualizado {new Date(p.lastSeenAt).toLocaleString("es-ES")} · Ref {p.externalId}</div>
             </div>
 

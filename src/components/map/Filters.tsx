@@ -5,12 +5,14 @@ export type FilterState = {
   q: string;
   priceMin?: string;
   priceMax?: string;
+  pricePerM2Min?: string;
+  pricePerM2Max?: string;
   areaMin?: string;
   roomsMin?: string;
   servicer: string[];
   propertyType: string[];
   province?: string;
-  sort: "newest" | "priceAsc" | "priceDesc" | "areaDesc";
+  sort: "newest" | "priceAsc" | "priceDesc" | "areaDesc" | "pricePerM2Asc" | "pricePerM2Desc";
 };
 
 const SERVICERS = [
@@ -56,6 +58,11 @@ export default function Filters({ value, onChange }: { value: FilterState; onCha
         <input placeholder="Hab. mín" type="number" value={local.roomsMin ?? ""} onChange={(e) => update({ roomsMin: e.target.value || undefined })} className="rounded-lg border px-3 py-2 text-sm" />
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <input placeholder="€/m² mín" type="number" value={local.pricePerM2Min ?? ""} onChange={(e) => update({ pricePerM2Min: e.target.value || undefined })} className="rounded-lg border px-3 py-2 text-sm" />
+        <input placeholder="€/m² máx" type="number" value={local.pricePerM2Max ?? ""} onChange={(e) => update({ pricePerM2Max: e.target.value || undefined })} className="rounded-lg border px-3 py-2 text-sm" />
+      </div>
+
       <div>
         <div className="text-xs font-semibold text-zinc-600 mb-2">Servicer</div>
         <div className="flex flex-wrap gap-1.5">
@@ -98,6 +105,8 @@ export default function Filters({ value, onChange }: { value: FilterState; onCha
           <option value="priceAsc">Precio ↑</option>
           <option value="priceDesc">Precio ↓</option>
           <option value="areaDesc">Superficie ↓</option>
+          <option value="pricePerM2Asc">€/m² ↑ (ganguitas)</option>
+          <option value="pricePerM2Desc">€/m² ↓</option>
         </select>
         <button
           onClick={() => { const reset: FilterState = { q: "", servicer: [], propertyType: [], sort: "newest" }; setLocal(reset); onChange(reset); }}

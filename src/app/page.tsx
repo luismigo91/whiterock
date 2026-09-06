@@ -11,6 +11,7 @@ type Property = {
   id: string;
   title: string;
   price: number;
+  pricePerM2?: number | null;
   province: string;
   municipality: string;
   latitude: number;
@@ -33,6 +34,8 @@ function useUrlFilters(): [FilterState, (s: FilterState) => void, string] {
       q: p.get("q") ?? "",
       priceMin: p.get("priceMin") ?? undefined,
       priceMax: p.get("priceMax") ?? undefined,
+      pricePerM2Min: p.get("pricePerM2Min") ?? undefined,
+      pricePerM2Max: p.get("pricePerM2Max") ?? undefined,
       areaMin: p.get("areaMin") ?? undefined,
       roomsMin: p.get("roomsMin") ?? undefined,
       servicer: p.get("servicer") ? p.get("servicer")!.split(",") : [],
@@ -48,6 +51,8 @@ function useUrlFilters(): [FilterState, (s: FilterState) => void, string] {
     if (next.q) params.set("q", next.q);
     if (next.priceMin) params.set("priceMin", next.priceMin);
     if (next.priceMax) params.set("priceMax", next.priceMax);
+    if (next.pricePerM2Min) params.set("pricePerM2Min", next.pricePerM2Min);
+    if (next.pricePerM2Max) params.set("pricePerM2Max", next.pricePerM2Max);
     if (next.areaMin) params.set("areaMin", next.areaMin);
     if (next.roomsMin) params.set("roomsMin", next.roomsMin);
     if (next.servicer.length) params.set("servicer", next.servicer.join(","));
@@ -62,6 +67,8 @@ function useUrlFilters(): [FilterState, (s: FilterState) => void, string] {
     if (filters.q) p.set("q", filters.q);
     if (filters.priceMin) p.set("priceMin", filters.priceMin);
     if (filters.priceMax) p.set("priceMax", filters.priceMax);
+    if (filters.pricePerM2Min) p.set("pricePerM2Min", filters.pricePerM2Min);
+    if (filters.pricePerM2Max) p.set("pricePerM2Max", filters.pricePerM2Max);
     if (filters.areaMin) p.set("areaMin", filters.areaMin);
     if (filters.roomsMin) p.set("roomsMin", filters.roomsMin);
     if (filters.servicer.length) p.set("servicer", filters.servicer.join(","));
@@ -219,16 +226,17 @@ export default function HomePage() {
                   className={`block bg-white rounded-xl border overflow-hidden hover:shadow-md transition ${hovered === p.id ? "ring-2 ring-amber-400" : ""}`}
                 >
                   <div className="h-40 bg-zinc-100 relative overflow-hidden">
-                    {p.photos[0] ? <img src={p.photos[0]} alt={p.title} className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-zinc-400 text-sm">Sin imágenes</div>}
+                    {p.photos[0] ? <img src={`/api/image?url=${encodeURIComponent(p.photos[0])}`} alt={p.title} className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-zinc-400 text-sm">Sin imágenes</div>}
                     <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-black/80 text-white text-xs font-semibold capitalize">{p.servicer}</div>
                     <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-white text-zinc-900 text-xs font-bold">{p.price.toLocaleString("es-ES")} €</div>
+                    {p.pricePerM2 ? <div className="absolute top-9 right-2 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold border border-amber-200">{Math.round(p.pricePerM2).toLocaleString("es-ES")} €/m²</div> : null}
                     <button onClick={(e) => toggleFav(p.id, e)} className={`absolute bottom-2 right-2 w-8 h-8 rounded-full grid place-items-center text-sm ${favorites.has(p.id) ? "bg-red-500 text-white" : "bg-white/90 text-zinc-600"}`}>
                       {favorites.has(p.id) ? "♥" : "♡"}
                     </button>
                   </div>
                   <div className="p-3">
                     <div className="font-semibold leading-tight line-clamp-1">{p.title}</div>
-                    <div className="text-xs text-zinc-500">{p.municipality}, {p.province} · {p.areaM2 ? `${p.areaM2} m²` : "—"} {p.rooms ? `· ${p.rooms} hab` : ""}</div>
+                    <div className="text-xs text-zinc-500">{p.municipality}, {p.province} · {p.areaM2 ? `${p.areaM2} m²` : "—"} {p.rooms ? `· ${p.rooms} hab` : ""} {p.pricePerM2 ? `· ${Math.round(p.pricePerM2)} €/m²` : ""}</div>
                     <div className="text-xs text-zinc-600 mt-1 capitalize">{p.propertyType.replace("_", " ")} · {p.status}</div>
                   </div>
                 </Link>

@@ -14,7 +14,7 @@ Explícitamente **no** indexa Idealista, Fotocasa ni particulares.
 ## Stack
 Next.js 16 (App Router) + TypeScript + Prisma 5.22 + PostgreSQL 15/PostGIS + Redis + BullMQ + Leaflet + Supercluster + Tailwind + Vitest + Playwright
 
-Ver `openspec/project.md` y `openspec/specs/` (5 specs v1 + 6 v2) para especificación completa.
+Ver `openspec/project.md` y `openspec/specs/` (8 specs: geo-normalization, property-catalog/detail, servicer-ingestion, map-search, favorites-alerts, observability, deploy, mailpit) para especificación completa.
 
 ## OpenSpec
 
@@ -28,7 +28,8 @@ npx openspec validate --strict
 
 **Historial:**
 - `2026-09-06-whiterock-aggregator` — MVP v1 archivado (mapa + ficha + mock)
-- `whiterock-v2` — v2 full activo (scraping Cheerio + cluster + favoritos/alertas + deploy + obs) — 22/22 tasks ✓
+- `2026-09-06-whiterock-v2` — v2 full (Cheerio+Playwright, cluster server, favoritos/alertas magic link, health/metrics, Docker+Vercel)
+- `whiterock-v3` — v3 polish (Mailpit SMTP dev, pricePerM2, proxy imágenes, release) — activo
 
 ## Desarrollo
 
@@ -48,25 +49,38 @@ curl http://localhost:3000/api/servicers
 
 ## Deploy
 
-**Local con Docker:**
+**Local con Docker (incl. Mailpit para magic link):**
 ```bash
-docker compose up --build   # web:3000 + db:5432 + redis:6379, healthcheck /api/health
+docker compose up --build   # web:3000 + db:5432 + redis:6379 + mailpit:8025/1025
+# ver magic links en http://localhost:8025 (Mailpit UI)
+# env: SMTP_HOST=mailpit SMTP_PORT=1025 (ver .env.example)
+# healthcheck: http://localhost:3000/api/health
 ```
 
 **Vercel prod:**
 ```bash
 vercel --prod
-# envs: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, CRON_SECRET, ADMIN_EMAILS, SLACK_WEBHOOK_URL
+# envs: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, CRON_SECRET, ADMIN_EMAILS, SLACK_WEBHOOK_URL, SMTP_HOST, SMTP_FROM
 # crons en vercel.json: 0 3 * * * y 0 */6 * * * → POST /api/cron/ingest
+```
+
+## Auth (magic link sin Google)
+
+```bash
+# dev sin SMTP: link se loguea en logs (docker logs web o npm run dev)
+# prod con SMTP real: configura SMTP_HOST/PORT/USER/PASS en .env
+# visita /auth/signin → introduce email → magic link
 ```
 
 ## Tests
 
 ```bash
-npm run test                # 47 vitest (unit+integration+e2e jsdom)
-npm run test:coverage       # v8 ≥66%
-npm run e2e                 # playwright 3/3 (mapa→ficha, bbox, empty)
-npm run typecheck && npm run build  # 14 routes (incl. /admin/ingest, /saved-searches, /api/clusters)
+npm run test                # 52 vitest (incl. pricePerM2 + image proxy)
+npm run test:coverage       # v8 ~65%
+npm run e2e                 # playwright 3/3 (mapa→ficha, bbox, empty) + mailpit e2e opcional
+npm run typecheck && npm run build  # 16 routes (incl. /admin/ingest, /saved-searches, /api/clusters/image, /auth/signin)
+curl "http://localhost:3000/api/properties?pricePerM2Max=1000&sort=pricePerM2Asc"
+curl "http://localhost:3000/api/image?url=https://picsum.photos/seed/wh1/800/600" --output /tmp/img.jpg
 ```
 
 ## Estructura prevista

@@ -12,10 +12,12 @@ export type PropertyFilters = {
   areaMax?: number;
   roomsMin?: number;
   bathroomsMin?: number;
+  pricePerM2Min?: number;
+  pricePerM2Max?: number;
   status?: string;
   bbox?: [number, number, number, number]; // minLng, minLat, maxLng, maxLat
   q?: string;
-  sort?: "priceAsc" | "priceDesc" | "newest" | "areaDesc";
+  sort?: "priceAsc" | "priceDesc" | "newest" | "areaDesc" | "pricePerM2Asc" | "pricePerM2Desc";
   page?: number;
   pageSize?: number;
   includeDelisted?: boolean;
@@ -26,6 +28,11 @@ function normalize(s: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function pricePerM2Of(p: MockProperty): number | null {
+  if (!p.areaM2 || p.areaM2 <= 0) return null;
+  return p.price / p.areaM2;
 }
 
 function matchesMock(p: MockProperty, f: PropertyFilters): boolean {
@@ -40,6 +47,12 @@ function matchesMock(p: MockProperty, f: PropertyFilters): boolean {
   if (f.areaMax !== undefined && (p.areaM2 ?? 999999) > f.areaMax) return false;
   if (f.roomsMin !== undefined && (p.rooms ?? 0) < f.roomsMin) return false;
   if (f.bathroomsMin !== undefined && (p.bathrooms ?? 0) < f.bathroomsMin) return false;
+  if (f.pricePerM2Min !== undefined || f.pricePerM2Max !== undefined) {
+    const ppm = pricePerM2Of(p);
+    if (ppm === null) return false;
+    if (f.pricePerM2Min !== undefined && ppm < f.pricePerM2Min) return false;
+    if (f.pricePerM2Max !== undefined && ppm > f.pricePerM2Max) return false;
+  }
   if (f.status && p.status !== f.status) return false;
   if (f.bbox) {
     const [minLng, minLat, maxLng, maxLat] = f.bbox;
@@ -84,6 +97,8 @@ export async function listProperties(filters: PropertyFilters): Promise<{ data: 
         filters.sort === "priceAsc" ? { price: "asc" } :
         filters.sort === "priceDesc" ? { price: "desc" } :
         filters.sort === "areaDesc" ? { areaM2: "desc" } :
+        filters.sort === "pricePerM2Asc" ? { price: "asc" } :
+        filters.sort === "pricePerM2Desc" ? { price: "desc" } :
         { createdAt: "desc" };
 
       const [total, rows] = await Promise.all([
@@ -98,40 +113,46 @@ export async function listProperties(filters: PropertyFilters): Promise<{ data: 
       ]);
 
       // Map DB rows to MockProperty shape for API consistency
-      const data = (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
-        id: r.id as string,
-        externalId: r.externalId as string,
-        servicer: r.servicer as string,
-        title: r.title as string,
-        description: (r.description as string) ?? "",
-        price: Math.round((r.price as number) / 100),
-        propertyType: r.propertyType as string,
-        status: r.status as string,
-        addressRaw: (r.addressRaw as string) ?? "",
-        addressNormalized: (r.addressNormalized as string) ?? "",
-        province: (r.province as string) ?? "",
-        municipality: (r.municipality as string) ?? "",
-        postalCode: (r.postalCode as string) ?? "",
-        latitude: r.latitude as number,
-        longitude: r.longitude as number,
-        geocodeConfidence: (r.geocodeConfidence as string) as MockProperty["geocodeConfidence"],
-        approximateLocation: r.approximateLocation as boolean,
-        areaM2: r.areaM2 as number | null,
-        rooms: r.rooms as number | null,
-        bathrooms: r.bathrooms as number | null,
-        yearBuilt: r.yearBuilt as number | null,
-        energyCert: r.energyCert as string | null,
-        photos: (r.photos as string[]) ?? [],
-        sourceUrl: r.sourceUrl as string,
-        lastSeenAt: (r.lastSeenAt as Date).toISOString(),
-        createdAt: (r.createdAt as Date).toISOString(),
-      })) as MockProperty[];
+      const data = (rows as unknown as Array<Record<string, unknown>>).map((r) => {
+        const price = Math.round((r.price as number) / 100);
+        const area = r.areaM2 as number | null;
+        return {
+          id: r.id as string,
+          externalId: r.externalId as string,
+          servicer: r.servicer as string,
+          title: r.title as string,
+          description: (r.description as string) ?? "",
+          price,
+          pricePerM2: area ? price / area : null,
+          propertyType: r.propertyType as string,
+          status: r.status as string,
+          addressRaw: (r.addressRaw as string) ?? "",
+          addressNormalized: (r.addressNormalized as string) ?? "",
+          province: (r.province as string) ?? "",
+          municipality: (r.municipality as string) ?? "",
+          postalCode: (r.postalCode as string) ?? "",
+          latitude: r.latitude as number,
+          longitude: r.longitude as number,
+          geocodeConfidence: (r.geocodeConfidence as string) as MockProperty["geocodeConfidence"],
+          approximateLocation: r.approximateLocation as boolean,
+          areaM2: area,
+          rooms: r.rooms as number | null,
+          bathrooms: r.bathrooms as number | null,
+          yearBuilt: r.yearBuilt as number | null,
+          energyCert: r.energyCert as string | null,
+          photos: (r.photos as string[]) ?? [],
+          sourceUrl: r.sourceUrl as string,
+          lastSeenAt: (r.lastSeenAt as Date).toISOString(),
+          createdAt: (r.createdAt as Date).toISOString(),
+        };
+      }) as unknown as MockProperty[];
 
-      // Apply q + area/rooms filters post-DB if needed
+      // Apply q + area/rooms/ppm filters post-DB if needed
       let filtered = data;
-      if (filters.q || filters.areaMin !== undefined || filters.areaMax !== undefined || filters.roomsMin !== undefined || filters.bathroomsMin !== undefined) {
+      if (filters.q || filters.areaMin !== undefined || filters.areaMax !== undefined || filters.roomsMin !== undefined || filters.bathroomsMin !== undefined || filters.pricePerM2Min !== undefined || filters.pricePerM2Max !== undefined || filters.sort?.startsWith("pricePerM2")) {
         filtered = data.filter((p) => matchesMock(p, { ...filters, page: 1, pageSize: 1000, bbox: undefined }));
-        // re-paginate after filter (inefficient but OK for fallback)
+        if (filters.sort === "pricePerM2Asc") filtered = filtered.sort((a, b) => ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity) - ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity));
+        if (filters.sort === "pricePerM2Desc") filtered = filtered.sort((a, b) => ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity) - ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity));
         return { data: filtered.slice(0, pageSize), total: filtered.length, totalPages: Math.ceil(filtered.length / pageSize) };
       }
 
@@ -147,15 +168,17 @@ export async function listProperties(filters: PropertyFilters): Promise<{ data: 
   if (filters.sort === "priceAsc") filtered = filtered.sort((a, b) => a.price - b.price);
   else if (filters.sort === "priceDesc") filtered = filtered.sort((a, b) => b.price - a.price);
   else if (filters.sort === "areaDesc") filtered = filtered.sort((a, b) => (b.areaM2 ?? 0) - (a.areaM2 ?? 0));
+  else if (filters.sort === "pricePerM2Asc") filtered = filtered.sort((a, b) => (pricePerM2Of(a) ?? Infinity) - (pricePerM2Of(b) ?? Infinity));
+  else if (filters.sort === "pricePerM2Desc") filtered = filtered.sort((a, b) => (pricePerM2Of(b) ?? -Infinity) - (pricePerM2Of(a) ?? -Infinity));
   else filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const total = filtered.length;
   const totalPages = Math.ceil(total / pageSize);
-  const data = filtered.slice((page - 1) * pageSize, page * pageSize);
-  return { data, total, totalPages };
+  const data = filtered.slice((page - 1) * pageSize, page * pageSize).map((p) => ({ ...p, pricePerM2: pricePerM2Of(p) })) as (MockProperty & { pricePerM2: number | null })[];
+  return { data: data as unknown as MockProperty[], total, totalPages };
 }
 
-export async function getPropertyById(id: string): Promise<MockProperty | null> {
+export async function getPropertyById(id: string): Promise<(MockProperty & { pricePerM2: number | null }) | null> {
   const dbAvailable = await isDbAvailable();
   if (dbAvailable) {
     try {
@@ -164,13 +187,16 @@ export async function getPropertyById(id: string): Promise<MockProperty | null> 
         include: { priceHistory: { orderBy: { date: "asc" } }, statusHistory: { orderBy: { date: "asc" } } },
       });
       if (row) {
+        const price = Math.round(row.price / 100);
+        const ppm = row.areaM2 ? price / row.areaM2 : null;
         return {
           id: row.id,
           externalId: row.externalId,
           servicer: row.servicer,
           title: row.title,
           description: row.description ?? "",
-          price: Math.round(row.price / 100),
+          price,
+          pricePerM2: ppm,
           propertyType: row.propertyType,
           status: row.status,
           addressRaw: row.addressRaw ?? "",
@@ -191,11 +217,13 @@ export async function getPropertyById(id: string): Promise<MockProperty | null> 
           sourceUrl: row.sourceUrl,
           lastSeenAt: row.lastSeenAt.toISOString(),
           createdAt: row.createdAt.toISOString(),
-        } as unknown as MockProperty & { priceHistory: unknown; statusHistory: unknown };
+        } as unknown as MockProperty & { pricePerM2: number | null; priceHistory: unknown; statusHistory: unknown };
       }
     } catch {}
   }
-  return MOCK_PROPERTIES.find((p) => p.id === id) ?? null;
+  const found = MOCK_PROPERTIES.find((p) => p.id === id) ?? null;
+  if (!found) return null;
+  return { ...found, pricePerM2: found.areaM2 ? found.price / found.areaM2 : null } as MockProperty & { pricePerM2: number | null };
 }
 
 export async function listServicers() {
