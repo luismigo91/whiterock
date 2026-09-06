@@ -54,5 +54,5 @@
 ## 8. Calidad, observabilidad y deploy
 
 - [ ] 8.1 Tests unitarios adapters/normalizador + e2e de flujo mapa→ficha
-- [ ] 8.2 Logs estructurados por servicer + métricas de ingesta + alerta si `ingested==0`
-- [ ] 8.3 CI (lint, typecheck, test) + deploy Vercel/Render + crons configurados + README con instrucciones
+- [x] 8.2 Logs estructurados por servicer + métricas de ingesta + alerta si `ingested==0`
+- [x] 8.3 CI (lint, typecheck, test) + deploy Vercel/Render + crons configurados + README con instrucciones
