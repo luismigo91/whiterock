@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_USER: whiterock
+      POSTGRES_PASSWORD: whiterock
+      POSTGRES_DB: whiterock
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whiterock"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://whiterock:whiterock@db:5432/whiterock?schema=public
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      NEXTAUTH_URL: http://localhost:3000
+      CRON_SECRET: ${CRON_SECRET:-dev-cron-secret}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      retries: 5
+
+volumes:
+  pgdata:

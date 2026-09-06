@@ -57,7 +57,7 @@ model Property {
   servicer           Servicer
   title              String
   description        String?           @db.Text
-  price              Int // cents? store as euros * 100? spec says cents; we store Int euros for simplicity (use cents)
+  price              Int // cents (euros*100) — canonical in v2, API exposes euros
   propertyType       PropertyType
   status             PropertyStatus    @default(disponible)
   addressRaw         String?
@@ -86,6 +86,8 @@ model Property {
 
   priceHistory  PriceHistory[]
   statusHistory StatusHistory[]
+  favorites     Favorite[]
+  alerts        Alert[]
 
   @@unique([servicer, externalId])
   @@index([province, municipality])
@@ -135,7 +137,7 @@ model GeocodeCache {
 model IngestJob {
   id           String    @id @default(uuid())
   servicer     Servicer
-  status       String    // queued, running, success, partial_failure, failed
+  status       String // queued, running, success, partial_failure, failed
   startedAt    DateTime? @default(now())
   finishedAt   DateTime?
   ingested     Int       @default(0)
@@ -145,6 +147,105 @@ model IngestJob {
   failed       Int       @default(0)
   error        String?   @db.Text
   createdAt    DateTime  @default(now())
+  usedPlaywright Boolean @default(false)
 
   @@index([servicer, createdAt])
+}
+
+// Auth.js / NextAuth models
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  savedSearches SavedSearch[]
+  favorites     Favorite[]
+  alerts        Alert[]
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Domain: saved searches / favorites / alerts
+model SavedSearch {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  filters   Json // {priceMin, priceMax, province, servicer[], bbox, etc}
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alerts Alert[]
+
+  @@index([userId, createdAt])
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@index([userId])
+}
+
+model Alert {
+  id            String   @id @default(uuid())
+  userId        String
+  savedSearchId String?
+  propertyId    String
+  type          String // new_listing | price_drop
+  payload       Json? // {oldPrice, newPrice}
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedSearch SavedSearch? @relation(fields: [savedSearchId], references: [id], onDelete: SetNull)
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([propertyId])
 }
