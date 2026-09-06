@@ -19,4 +19,4 @@
 ## 4. Release
 
 - [x] 4.1 Actualizar `README` sección Deploy con Mailpit `http://localhost:8025` y `CHANGELOG.md` con v0.1.0 desde archive
-- [ ] 4.2 `git tag v0.1.0` + `npm run typecheck`/`build`/`test` verdes, `npx openspec validate whiterock-v3 --strict` y archivar
+- [x] 4.2 `git tag v0.1.0` + `npm run typecheck`/`build`/`test` verdes, `npx openspec validate whiterock-v3 --strict` y archivar

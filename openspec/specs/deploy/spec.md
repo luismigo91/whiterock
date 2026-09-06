@@ -4,11 +4,15 @@
 Estandarizar despliegue reproducible en local y producción con Docker, migraciones y crons, eliminando drift entre dev y prod y permitiendo ingesta programada sin intervención manual.
 ## Requirements
 ### Requirement: Dockerfile multistage y compose
-El repo SHALL incluir `Dockerfile` multistage (deps → build → runner non-root) y `docker-compose.yml` con servicios `web` (Next), `db` (postgres:15 + postgis) y `redis` opcional, todos comunicados por red `whiterock`, con healthchecks.
+El repo SHALL incluir `Dockerfile` multistage (deps → build → runner non-root) y `docker-compose.yml` con servicios `web` (Next), `db` (postgres:15 + postgis), `redis` opcional y `mailpit` (axllent/mailpit, 1025:1025, 8025:8025) para SMTP dev, todos comunicados por red `whiterock`, con healthchecks.
 
 #### Scenario: docker compose up
 - **WHEN** se ejecuta `docker compose up --build`
 - **THEN** web arranca en 3000, db en 5432 y `GET /api/health` devuelve 200 en <5s
+
+#### Scenario: Mailpit disponible
+- **WHEN** se ejecuta `docker compose up`
+- **THEN** `http://localhost:8025` muestra UI de Mailpit y magic links aparecen en `GET /api/v1/messages`
 
 ### Requirement: Migraciones y seed prod
 El contenedor web SHALL ejecutar `prisma migrate deploy` al arrancar (o `entrypoint` que lo hace) y exponer comando `npm run db:seed` idempotente; `DATABASE_URL` SHALL venir de env sin hardcode.
