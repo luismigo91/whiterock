@@ -55,7 +55,6 @@ function useUrlFilters(): [FilterState, (s: FilterState) => void, string] {
     const url = params.toString() ? `?${params}` : window.location.pathname;
     window.history.replaceState(null, "", url);
   }, []);
-  // hydrate from URL on mount
   useEffect(() => setFilters(getInitial()), []);
   const qs = (() => {
     const p = new URLSearchParams();
@@ -80,6 +79,8 @@ export default function HomePage() {
   const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"lista" | "mapa">("lista");
+  const [alerts, setAlerts] = useState<Array<{ id: string }>>([]);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -102,9 +103,48 @@ export default function HomePage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    fetch("/api/alerts")
+      .then((r) => r.json())
+      .then((j) => setAlerts(Array.isArray(j) ? j.filter((a: { isRead: boolean }) => !a.isRead) : []))
+      .catch(() => {});
+    fetch("/api/favorites")
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j)) setFavorites(new Set(j.map((f: { propertyId: string; id: string }) => f.propertyId ?? f.id)));
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleFav = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const isFav = favorites.has(id);
+    if (isFav) {
+      await fetch(`/api/favorites?propertyId=${id}`, { method: "DELETE" });
+      setFavorites((prev) => {
+        const n = new Set(prev);
+        n.delete(id);
+        return n;
+      });
+    } else {
+      await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ propertyId: id }) });
+      setFavorites((prev) => new Set(prev).add(id));
+    }
+  };
+
+  const saveSearch = async () => {
+    const name = prompt("Nombre para esta búsqueda:", `Búsqueda ${filters.province ?? filters.q ?? "Whiterock"}`);
+    if (!name) return;
+    const res = await fetch("/api/saved-searches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, filters }),
+    });
+    if (res.ok) alert("Búsqueda guardada. Te avisaremos si hay nuevas altas o bajadas >5%.");
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
       <header className="sticky top-0 z-30 bg-white border-b">
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -117,24 +157,35 @@ export default function HomePage() {
               Aliseda · Servihabitat · Haya · Altamira · Solvia · +3 más
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="hidden md:inline text-sm text-zinc-600">{total} inmuebles</span>
-            <a href="https://github.com" className="text-sm text-zinc-600 hidden sm:inline">Docs</a>
+            <Link href="/saved-searches" className="hidden sm:inline text-sm text-zinc-700 hover:underline">
+              Mis búsquedas
+            </Link>
+            <Link href="/admin/ingest" className="hidden sm:inline text-xs border rounded-full px-2.5 py-1">
+              Admin
+            </Link>
+            <Link href="/saved-searches" className="relative p-2 rounded-full hover:bg-zinc-100">
+              <span className="text-lg">🔔</span>
+              {alerts.length > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] w-4 h-4 grid place-items-center rounded-full">{alerts.length}</span>}
+            </Link>
+            <a href="/api/health" className="text-xs text-zinc-400 hidden md:inline">health</a>
           </div>
         </div>
       </header>
 
-      {/* Mobile toggle */}
       <div className="md:hidden sticky top-[57px] z-20 bg-white border-b px-4 py-2 flex gap-2">
         <button onClick={() => setMobileTab("lista")} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mobileTab === "lista" ? "bg-black text-white" : "bg-zinc-100"}`}>Lista ({total})</button>
         <button onClick={() => setMobileTab("mapa")} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mobileTab === "mapa" ? "bg-black text-white" : "bg-zinc-100"}`}>Mapa</button>
       </div>
 
       <div className="flex-1 max-w-[1600px] w-full mx-auto flex flex-col md:flex-row min-h-[calc(100vh-57px)]">
-        {/* Sidebar filters + list */}
         <div className={`${mobileTab === "mapa" ? "hidden md:flex" : "flex"} w-full md:w-[420px] lg:w-[440px] flex-col border-r bg-zinc-50 overflow-hidden`}>
-          <div className="p-4 space-y-4 overflow-auto">
+          <div className="p-4 space-y-3 overflow-auto">
             <Filters value={filters} onChange={setFilters} />
+            <button onClick={saveSearch} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2 text-sm font-semibold">
+              🔔 Alertar de esta búsqueda
+            </button>
             <div className="text-xs text-zinc-500">
               {loading ? "Cargando…" : `${total} resultados${bbox ? " en el mapa visible" : ""}`}
             </div>
@@ -166,14 +217,12 @@ export default function HomePage() {
                   className={`block bg-white rounded-xl border overflow-hidden hover:shadow-md transition ${hovered === p.id ? "ring-2 ring-amber-400" : ""}`}
                 >
                   <div className="h-40 bg-zinc-100 relative overflow-hidden">
-                    {p.photos[0] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.photos[0]} alt={p.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-zinc-400 text-sm">Sin imágenes</div>
-                    )}
+                    {p.photos[0] ? <img src={p.photos[0]} alt={p.title} className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-zinc-400 text-sm">Sin imágenes</div>}
                     <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-black/80 text-white text-xs font-semibold capitalize">{p.servicer}</div>
                     <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-white text-zinc-900 text-xs font-bold">{p.price.toLocaleString("es-ES")} €</div>
+                    <button onClick={(e) => toggleFav(p.id, e)} className={`absolute bottom-2 right-2 w-8 h-8 rounded-full grid place-items-center text-sm ${favorites.has(p.id) ? "bg-red-500 text-white" : "bg-white/90 text-zinc-600"}`}>
+                      {favorites.has(p.id) ? "♥" : "♡"}
+                    </button>
                   </div>
                   <div className="p-3">
                     <div className="font-semibold leading-tight line-clamp-1">{p.title}</div>
@@ -186,7 +235,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Map */}
         <div className={`${mobileTab === "lista" ? "hidden md:block" : "block"} flex-1 relative min-h-[50vh] md:min-h-0`}>
           <div className="absolute inset-0">
             <MapView properties={properties} hoveredId={hovered} onBboxChange={setBbox} onMarkerClick={(id) => (window.location.href = `/properties/${id}`)} />

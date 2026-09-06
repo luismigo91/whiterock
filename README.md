@@ -12,55 +12,61 @@ El comprador/inversor hoy debe recorrer 8-10 portales distintos con buscadores y
 Explícitamente **no** indexa Idealista, Fotocasa ni particulares.
 
 ## Stack
-Next.js 15 (App Router) + TypeScript + Prisma + PostgreSQL/PostGIS + BullMQ + MapLibre GL + Tailwind
+Next.js 16 (App Router) + TypeScript + Prisma 5.22 + PostgreSQL 15/PostGIS + Redis + BullMQ + Leaflet + Supercluster + Tailwind + Vitest + Playwright
 
-Ver `openspec/project.md` y `openspec/changes/whiterock-aggregator/` para especificación completa.
+Ver `openspec/project.md` y `openspec/specs/` (5 specs v1 + 6 v2) para especificación completa.
 
 ## OpenSpec
 
 Este repo está gestionado con [OpenSpec](https://github.com/Fission-AI/OpenSpec) (spec-driven).
 
 ```bash
-npx openspec list              # ver changes
-npx openspec show whiterock-aggregator
-npx openspec status --change whiterock-aggregator
+npx openspec list
+npx openspec status --change whiterock-v2
+npx openspec validate --strict
 ```
 
-### Change activo
+**Historial:**
+- `2026-09-06-whiterock-aggregator` — MVP v1 archivado (mapa + ficha + mock)
+- `whiterock-v2` — v2 full activo (scraping Cheerio + cluster + favoritos/alertas + deploy + obs) — 22/22 tasks ✓
 
-**`whiterock-aggregator`** — 4/4 artefactos completos ✓
-
-- `proposal.md` — por qué y qué cambia
-- `specs/servicer-ingestion`, `property-catalog`, `geo-normalization`, `map-search`, `property-detail` — contratos de comportamiento
-- `design.md` — decisiones de arquitectura
-- `tasks.md` — 30 tareas en 8 grupos para implementación
-
-Validado: `npx openspec validate whiterock-aggregator --strict` ✓
-
-### Siguiente paso
+## Desarrollo
 
 ```bash
-# Implementar las tareas del change
-/opsx-apply whiterock-aggregator   # en OpenCode
-# o
-npx openspec instructions tasks --change whiterock-aggregator --json
-```
-
-Tras implementar, archivar:
-
-```bash
-npx openspec archive whiterock-aggregator
-```
-
-## Desarrollo (tras bootstrap)
-
-```bash
-cp .env.example .env        # DATABASE_URL, REDIS_URL, GEOCODER, etc.
+cp .env.example .env        # DATABASE_URL, REDIS_URL, NEXTAUTH_SECRET, CRON_SECRET
 npm install
-npx prisma migrate dev
-npx prisma db seed
+npx prisma migrate dev      # o prisma db push para dev sin migración
+npx prisma db seed          # 16 fixtures
 npm run dev                 # http://localhost:3000
 npm run ingest:aliseda      # job manual por servicer
+# APIs
+curl "http://localhost:3000/api/properties?bbox=-0.5,39.3,-0.2,39.6"
+curl http://localhost:3000/api/health
+curl http://localhost:3000/api/metrics
+curl http://localhost:3000/api/servicers
+```
+
+## Deploy
+
+**Local con Docker:**
+```bash
+docker compose up --build   # web:3000 + db:5432 + redis:6379, healthcheck /api/health
+```
+
+**Vercel prod:**
+```bash
+vercel --prod
+# envs: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, CRON_SECRET, ADMIN_EMAILS, SLACK_WEBHOOK_URL
+# crons en vercel.json: 0 3 * * * y 0 */6 * * * → POST /api/cron/ingest
+```
+
+## Tests
+
+```bash
+npm run test                # 47 vitest (unit+integration+e2e jsdom)
+npm run test:coverage       # v8 ≥66%
+npm run e2e                 # playwright 3/3 (mapa→ficha, bbox, empty)
+npm run typecheck && npm run build  # 14 routes (incl. /admin/ingest, /saved-searches, /api/clusters)
 ```
 
 ## Estructura prevista
