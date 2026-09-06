@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Filters, { FilterState } from "@/components/map/Filters";
 import Link from "next/link";
+import SignInButton from "@/components/auth/SignInButton";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), { ssr: false });
 
@@ -165,6 +166,7 @@ export default function HomePage() {
             <Link href="/admin/ingest" className="hidden sm:inline text-xs border rounded-full px-2.5 py-1">
               Admin
             </Link>
+            <SignInButton />
             <Link href="/saved-searches" className="relative p-2 rounded-full hover:bg-zinc-100">
               <span className="text-lg">🔔</span>
               {alerts.length > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] w-4 h-4 grid place-items-center rounded-full">{alerts.length}</span>}
