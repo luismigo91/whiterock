@@ -247,7 +247,7 @@ export default function HomePage() {
 
         <div className={`${mobileTab === "lista" ? "hidden md:block" : "block"} flex-1 relative min-h-[50vh] md:min-h-0`}>
           <div className="absolute inset-0">
-            <MapView properties={properties} hoveredId={hovered} onBboxChange={setBbox} onMarkerClick={(id) => (window.location.href = `/properties/${id}`)} />
+            <MapView properties={properties} total={total} hoveredId={hovered} onBboxChange={setBbox} onMarkerClick={(id) => (window.location.href = `/properties/${id}`)} />
           </div>
           {bbox && (
             <button onClick={() => setBbox(null)} className="absolute top-3 left-3 z-[400] bg-white border rounded-full px-3 py-1.5 text-xs font-medium shadow">

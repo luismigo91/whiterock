@@ -92,25 +92,16 @@ export async function listProperties(filters: PropertyFilters): Promise<{ data: 
       if (!filters.includeDelisted) where.status = { not: "delisted" };
       else if (filters.status) where.status = filters.status;
 
-      // q search handled post-filter for simplicity (could use full-text)
-      const orderBy: Record<string,string> =
-        filters.sort === "priceAsc" ? { price: "asc" } :
-        filters.sort === "priceDesc" ? { price: "desc" } :
-        filters.sort === "areaDesc" ? { areaM2: "desc" } :
-        filters.sort === "pricePerM2Asc" ? { price: "asc" } :
-        filters.sort === "pricePerM2Desc" ? { price: "desc" } :
-        { createdAt: "desc" };
-
-      const [total, rows] = await Promise.all([
-        prisma.property.count({ where: where as never }),
-        prisma.property.findMany({
-          where: where as never,
-          orderBy: orderBy as never,
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          include: { priceHistory: { orderBy: { date: "asc" } }, statusHistory: { orderBy: { date: "asc" } } },
-        }),
-      ]);
+      // Fetch all rows matching the indexed filters (cap 5000), then apply
+      // the remaining filters (q/area/rooms/ppm) + sort + paginate in memory.
+      // This keeps `page` correct for every filter combination; a future
+      // optimization is pushing these predicates into SQL with a functional
+      // index on price/areaM2 once volume exceeds the cap.
+      const rows = await prisma.property.findMany({
+        where: where as never,
+        orderBy: { createdAt: "desc" },
+        take: 5000,
+      });
 
       // Map DB rows to MockProperty shape for API consistency
       const data = (rows as unknown as Array<Record<string, unknown>>).map((r) => {
@@ -147,16 +138,21 @@ export async function listProperties(filters: PropertyFilters): Promise<{ data: 
         };
       }) as unknown as MockProperty[];
 
-      // Apply q + area/rooms/ppm filters post-DB if needed
-      let filtered = data;
-      if (filters.q || filters.areaMin !== undefined || filters.areaMax !== undefined || filters.roomsMin !== undefined || filters.bathroomsMin !== undefined || filters.pricePerM2Min !== undefined || filters.pricePerM2Max !== undefined || filters.sort?.startsWith("pricePerM2")) {
-        filtered = data.filter((p) => matchesMock(p, { ...filters, page: 1, pageSize: 1000, bbox: undefined }));
-        if (filters.sort === "pricePerM2Asc") filtered = filtered.sort((a, b) => ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity) - ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity));
-        if (filters.sort === "pricePerM2Desc") filtered = filtered.sort((a, b) => ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity) - ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity));
-        return { data: filtered.slice(0, pageSize), total: filtered.length, totalPages: Math.ceil(filtered.length / pageSize) };
-      }
+      // Apply the full filter set in memory (bbox/servicer/etc. were already
+      // narrowed by `where`, re-applying them here is idempotent) so every
+      // combination behaves like the mock path, then sort globally and
+      // paginate with the requested offset.
+      let filtered = data.filter((p) => matchesMock(p, { ...filters, page: 1, pageSize: 1000, bbox: undefined }));
+      if (filters.sort === "priceAsc") filtered = filtered.sort((a, b) => a.price - b.price);
+      else if (filters.sort === "priceDesc") filtered = filtered.sort((a, b) => b.price - a.price);
+      else if (filters.sort === "areaDesc") filtered = filtered.sort((a, b) => (b.areaM2 ?? 0) - (a.areaM2 ?? 0));
+      else if (filters.sort === "pricePerM2Asc") filtered = filtered.sort((a, b) => ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity) - ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? Infinity));
+      else if (filters.sort === "pricePerM2Desc") filtered = filtered.sort((a, b) => ((b as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity) - ((a as unknown as { pricePerM2: number | null }).pricePerM2 ?? -Infinity));
+      else filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      return { data, total, totalPages: Math.ceil(total / pageSize) };
+      const total = filtered.length;
+      const totalPages = Math.ceil(total / pageSize);
+      return { data: filtered.slice((page - 1) * pageSize, page * pageSize), total, totalPages };
     } catch (e) {
       console.warn("[propertyRepo] DB error, fallback to mock", e);
     }

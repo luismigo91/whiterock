@@ -2,7 +2,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY prisma ./prisma
 RUN npx prisma generate
 
@@ -25,4 +25,4 @@ COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/src ./src
 USER nextjs
 EXPOSE 3000
-CMD sh -c "npx prisma migrate deploy && npm start"
+CMD sh -c "npx prisma migrate deploy || npx prisma db push; npm start"

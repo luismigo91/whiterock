@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -13,30 +13,44 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
+type Bbox = [number, number, number, number];
+
+type MapItem = {
+  id: string;
+  title: string;
+  price: number;
+  latitude: number;
+  longitude: number;
+  servicer: string;
+  province: string;
+  municipality: string;
+  areaM2: number | null;
+  photos: string[];
+  isCluster?: boolean;
+  point_count?: number;
+  cluster_id?: number;
+};
+
 type Props = {
-  properties: Array<{
-    id: string;
-    title: string;
-    price: number;
-    latitude: number;
-    longitude: number;
-    servicer: string;
-    province: string;
-    municipality: string;
-    areaM2: number | null;
-    photos: string[];
-  }>;
+  properties: MapItem[];
+  /** Total de resultados en el servidor (puede ser mayor que properties.length por paginación). */
+  total: number;
   hoveredId: string | null;
-  onBboxChange?: (bbox: [number, number, number, number]) => void;
+  onBboxChange?: (bbox: Bbox) => void;
   onMarkerClick?: (id: string) => void;
 };
 
-function BboxHandler({ onChange }: { onChange?: (b: [number, number, number, number]) => void }) {
+const CLUSTER_MIN_TOTAL = 500;
+const CLUSTER_MAX_ZOOM = 12;
+
+function MapEvents({ onBbox, onZoom }: { onBbox?: (b: Bbox) => void; onZoom?: (z: number) => void }) {
   useMapEvents({
     moveend(e) {
-      const map = e.target;
-      const b = map.getBounds();
-      onChange?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      const b = e.target.getBounds();
+      onBbox?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    },
+    zoomend(e) {
+      onZoom?.(e.target.getZoom());
     },
   });
   return null;
@@ -62,81 +76,85 @@ function clusterIcon(count: number) {
   });
 }
 
-export default function MapView({ properties, hoveredId, onBboxChange, onMarkerClick }: Props & { clusters?: Array<{ geometry: { coordinates: [number, number] }; properties: { cluster: boolean; point_count?: number; cluster_id?: number; id?: string; price?: number; servicer?: string } }> }) {
+function ClusterMarker({ item }: { item: MapItem }) {
+  const map = useMap();
+  const count = item.point_count ?? 0;
+  return (
+    <Marker
+      position={[item.latitude, item.longitude]}
+      icon={clusterIcon(count)}
+      eventHandlers={{
+        click: () => map.setView([item.latitude, item.longitude], Math.min(map.getZoom() + 2, 18)),
+      }}
+    >
+      <Popup>{count} inmuebles — haz zoom para desagregar</Popup>
+    </Marker>
+  );
+}
+
+export default function MapView({ properties, total, hoveredId, onBboxChange, onMarkerClick }: Props) {
   const [mounted, setMounted] = useState(false);
-  const [clusters, setClusters] = useState<Props["properties"] | null>(null);
+  const [bbox, setBbox] = useState<Bbox | null>(null);
   const [zoom, setZoom] = useState(6);
-  const useClusters = properties.length > 500 || (clusters !== null && zoom < 12);
+  const [clusters, setClusters] = useState<MapItem[] | null>(null);
 
   useEffect(() => setMounted(true), []);
+
+  const wantClusters = total > CLUSTER_MIN_TOTAL && zoom < CLUSTER_MAX_ZOOM;
+
+  useEffect(() => {
+    if (!wantClusters || !bbox) {
+      setClusters(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/properties/clusters?bbox=${bbox.join(",")}&zoom=${zoom}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j.features) return;
+        setClusters(
+          j.features.map((f: { geometry: { coordinates: [number, number] }; properties: Record<string, unknown> }) => ({
+            id: String(f.properties.id ?? `cluster-${f.properties.cluster_id}`),
+            title: f.properties.cluster ? `${f.properties.point_count} inmuebles` : String(f.properties.id ?? ""),
+            price: (f.properties.price as number) ?? 0,
+            latitude: f.geometry.coordinates[1],
+            longitude: f.geometry.coordinates[0],
+            servicer: (f.properties.servicer as string) ?? "cluster",
+            province: "",
+            municipality: "",
+            areaM2: null,
+            photos: [],
+            isCluster: !!f.properties.cluster,
+            point_count: f.properties.point_count as number | undefined,
+            cluster_id: f.properties.cluster_id as number | undefined,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [bbox, zoom, wantClusters]);
+
   if (!mounted) return <div className="h-full w-full bg-zinc-100 animate-pulse" />;
 
   const center: [number, number] = properties[0] ? [properties[0].latitude, properties[0].longitude] : [40.416, -3.703];
+  const items = wantClusters && clusters ? clusters : properties;
+
   return (
-    <MapContainer
-      center={center}
-      zoom={6}
-      className="h-full w-full"
-      scrollWheelZoom
-    >
+    <MapContainer center={center} zoom={6} className="h-full w-full" scrollWheelZoom>
       <TileLayer url={process.env.NEXT_PUBLIC_MAP_TILES || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"} attribution={process.env.NEXT_PUBLIC_MAP_ATTRIBUTION || "&copy; OpenStreetMap"} />
-      <BboxHandler
-        onChange={(bbox) => {
-          onBboxChange?.(bbox);
-          // Fetch clusters when zoom <12 and many points — fire-and-forget
-          try {
-            const z = (document.querySelector(".leaflet-map-pane") as HTMLElement)?.dataset?.zoom ? Number((document.querySelector(".leaflet-map-pane") as HTMLElement).dataset.zoom) : 6;
-            setZoom(z);
-            if (properties.length > 500 && z < 12) {
-              fetch(`/api/properties/clusters?bbox=${bbox.join(",")}&zoom=${z}`)
-                .then((r) => r.json())
-                .then((j) => {
-                  if (j.features) {
-                    const pts: Props["properties"] = j.features.map((f: { geometry: { coordinates: [number, number] }; properties: Record<string, unknown> }) => ({
-                      id: String(f.properties.id ?? f.properties.cluster_id ?? Math.random()),
-                      title: f.properties.cluster ? `${f.properties.point_count} inmuebles` : String(f.properties.id),
-                      price: (f.properties.price as number) ?? 0,
-                      latitude: f.geometry.coordinates[1],
-                      longitude: f.geometry.coordinates[0],
-                      servicer: (f.properties.servicer as string) ?? "cluster",
-                      province: "",
-                      municipality: "",
-                      areaM2: null,
-                      photos: [],
-                                            isCluster: !!f.properties.cluster,
-                      point_count: f.properties.point_count,
-                      cluster_id: f.properties.cluster_id,
-                    }));
-                    setClusters(pts as never);
-                  }
-                })
-                .catch(() => {});
-            } else {
-              setClusters(null);
-            }
-          } catch {}
+      <MapEvents
+        onBbox={(b) => {
+          setBbox(b);
+          onBboxChange?.(b);
         }}
+        onZoom={setZoom}
       />
-      {(useClusters && clusters ? clusters : properties).map((p) => {
-        if ((p as unknown as { isCluster: boolean }).isCluster) {
-          return (
-            <Marker
-              key={String(p.id)}
-              position={[p.latitude, p.longitude]}
-              icon={clusterIcon((p as unknown as { point_count: number }).point_count ?? 0)}
-              eventHandlers={{
-                click: (e) => {
-                  // zoom in on cluster
-                  const map = (e.target as L.Marker).getLatLng ? null : null;
-                  // fallback: just re-center via bbox change (parent handles zoom via map)
-                },
-              }}
-            >
-              <Popup>{(p as unknown as { point_count: number }).point_count} inmuebles — haz zoom</Popup>
-            </Marker>
-          );
-        }
-        return (
+      {items.map((p) =>
+        p.isCluster ? (
+          <ClusterMarker key={p.id} item={p} />
+        ) : (
           <Marker
             key={p.id}
             position={[p.latitude, p.longitude]}
@@ -152,8 +170,8 @@ export default function MapView({ properties, hoveredId, onBboxChange, onMarkerC
               </div>
             </Popup>
           </Marker>
-        );
-      })}
+        )
+      )}
     </MapContainer>
   );
 }
