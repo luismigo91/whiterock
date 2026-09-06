@@ -1,0 +1,5 @@
+schema: spec-driven
+context: |
+  Proyecto Whiterock: agregador tipo Idealista 100% enfocado en servicers bancarios (Aliseda, Servihabitat, Haya, Altamira/doValue, Solvia, Anticipa, Diglo).
+  Stack: Next.js 15 + TypeScript + Prisma + PostgreSQL/PostGIS + BullMQ + MapLibre + Tailwind.
+  Ver openspec/project.md para detalles de dominio, stack y convenciones.
