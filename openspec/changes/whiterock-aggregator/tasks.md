@@ -34,7 +34,7 @@
 - [x] 5.1 `GET /api/properties` con filtros (`servicer[]`, `propertyType[]`, `province`, `municipality`, `priceMin/Max`, `areaMin/Max`, `roomsMin`, `bbox`, `q`, `sort`, `page/pageSize` máx 50)
 - [x] 5.2 `GET /api/properties/:id` con `priceHistory`, `statusHistory`, `photos`, `sourceUrl`
 - [x] 5.3 Validación Zod de query params + manejo de errores (400/404) + headers de paginación (`X-Total-Count`)
-- [ ] 5.4 Tests de integración para bbox, filtros combinados y paginación con 10k fixtures
+- [x] 5.4 Tests de integración para bbox, filtros combinados y paginación con 10k fixtures
 
 ## 6. Mapa y búsqueda (map-search)
 
@@ -53,6 +53,6 @@
 
 ## 8. Calidad, observabilidad y deploy
 
-- [ ] 8.1 Tests unitarios adapters/normalizador + e2e de flujo mapa→ficha
+- [x] 8.1 Tests unitarios adapters/normalizador + e2e de flujo mapa→ficha
 - [x] 8.2 Logs estructurados por servicer + métricas de ingesta + alerta si `ingested==0`
 - [x] 8.3 CI (lint, typecheck, test) + deploy Vercel/Render + crons configurados + README con instrucciones
