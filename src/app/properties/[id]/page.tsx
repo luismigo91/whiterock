@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getPropertyById } from "@/server/repositories/property";
+import CopyLinkButton from "@/components/property/CopyLinkButton";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -102,12 +103,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
             <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer" className="block w-full text-center bg-black text-white rounded-xl py-3 font-semibold hover:bg-zinc-800">
               Ver en {p.servicer} →
             </a>
-            <button
-              onClick={() => navigator.clipboard.writeText(window.location.href).then(() => alert("Link copiado"))}
-              className="w-full border rounded-xl py-2.5 text-sm font-medium"
-            >
-              Copiar link
-            </button>
+            <CopyLinkButton />
             <div className="text-xs text-zinc-500 break-all">URL canónica: {canonical}</div>
 
             {/* Mini mapa placeholder */}
